@@ -17,6 +17,7 @@ import android.os.Bundle;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
@@ -96,6 +97,14 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
         btnSubmit.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                try {
+                    // hides the keyboard on click
+                    InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                    imm.hideSoftInputFromWindow(getCurrentFocus().getWindowToken(), 0);
+                } catch(Exception e){
+
+                }
+
                 // clear the recyclerview so that last search won't be in the list
                 clearRecyclerView();
                 if (!etStartAddr.getText().toString().trim().toUpperCase().equals("CURRENT LOCATION")) {
