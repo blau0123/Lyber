@@ -16,6 +16,12 @@ public class UberRide {
         rideType = ride;
     }
 
+    public UberRide(UberRide prevRide){
+        minEstim = prevRide.getMinEstim();
+        maxEstim = prevRide.getMaxEstim();
+        rideType = prevRide.getRideType();
+    }
+
     public String getMaxEstim() {
         return maxEstim;
     }

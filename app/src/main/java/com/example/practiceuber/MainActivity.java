@@ -1,11 +1,14 @@
 package com.example.practiceuber;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
@@ -27,8 +30,11 @@ import com.lyft.networking.LyftApiFactory;
 import com.lyft.networking.apiObjects.CostEstimate;
 import com.lyft.networking.apiObjects.CostEstimateResponse;
 import com.lyft.networking.apis.LyftPublicApi;
+import com.uber.sdk.android.core.Deeplink;
 import com.uber.sdk.android.core.UberSdk;
+import com.uber.sdk.android.rides.RideParameters;
 import com.uber.sdk.rides.client.ServerTokenSession;
+import com.uber.sdk.rides.client.Session;
 import com.uber.sdk.rides.client.SessionConfiguration;
 import com.uber.sdk.rides.client.UberRidesApi;
 import com.uber.sdk.rides.client.model.PriceEstimate;
@@ -39,6 +45,8 @@ import com.uber.sdk.rides.client.model.RideEstimate;
 import com.uber.sdk.rides.client.model.RideRequestParameters;
 import com.uber.sdk.rides.client.model.TimeEstimatesResponse;
 import com.uber.sdk.rides.client.services.RidesService;
+
+import org.apache.log4j.chainsaw.Main;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -90,6 +98,10 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
             public void onClick(View v) {
                 // clear the recyclerview so that last search won't be in the list
                 clearRecyclerView();
+                if (!etStartAddr.getText().toString().trim().toUpperCase().equals("CURRENT LOCATION")) {
+                    startLong = 0;
+                    startLat = 0;
+                }
 
                 // check if start and end locations were inputted
                 if ( etStartAddr.getText() != null && etEndAddr.getText() != null &&
@@ -115,7 +127,7 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
                         new MainActivity.loadEstimations().execute();
                     }
                     else{
-                        Toast.makeText(MainActivity.this, "Nani", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "Be more specific, please :)", Toast.LENGTH_SHORT).show();
                     }
                 }
             }
@@ -130,7 +142,9 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
         }
         else{
             // permission granted
-            setStartAddressAsCurrent();
+            if (!etStartAddr.getText().toString().trim().toUpperCase().equals("CURRENT LOCATION")) {
+                setStartAddressAsCurrent();
+            }
         }
 
         setUpUber();
@@ -156,7 +170,9 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
                 // if request cancelled, result arrays empty
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED){
                     // permission granted, so set start addr as current location
-                    setStartAddressAsCurrent();
+                    if (!etStartAddr.getText().toString().trim().toUpperCase().equals("CURRENT LOCATION")) {
+                        setStartAddressAsCurrent();
+                    }
                 }
                 else{
                     // permission denied, don't set the start addr as anything!
@@ -207,8 +223,9 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
             if (addresses == null){
                 return null;
             }
+            System.out.println(addresses);
             addr = addresses.get(0);
-        } catch(IOException e){
+        } catch(Exception e){
             e.printStackTrace();
         }
         return addr;
@@ -221,7 +238,7 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
         SessionConfiguration config = new SessionConfiguration.Builder()
                 .setClientId("yPM13cwignlOH8w-8Ag09Ue0cW-dkFyN")
                 .setServerToken("4kt8rc31h1lOMVccszXdRocg1vn9p383L9GLkiAC")
-                .setRedirectUri("12345")
+                //.setRedirectUri("12345")
                 .setEnvironment(SessionConfiguration.Environment.SANDBOX)
                 .build();
         UberSdk.initialize(config);
@@ -279,13 +296,15 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
         }
 
         // if lyft has more entries left, then uber has none. add rest of lyft to rides
-        if (lyftRides.size() > 0){
+        if (index < lyftRides.size()){
+            //System.out.println("index: " + index + ", lyftsize: " + lyftRides.size() + ", ubersize: " + uberRides.size());
             for (; index < lyftRides.size(); index++ ){
                 rides.add(new Ride( new UberRide(), lyftRides.get(index)));
             }
         }
         // if not, then lyft has no entries left, so add rest of uber
         else{
+            System.out.println("should be here");
             for (; index < uberRides.size(); index++){
                 rides.add(new Ride( uberRides.get(index), new LyftRide()));
             }
@@ -294,10 +313,72 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
     }
 
     /*
-    Reorder uberRides ArrayList so it is in the same order as lyftRides
+    Reorder uberRides ArrayList so it is in the same order as lyftRides. Inefficient.
     e.g. Lyft Line is with UberPool, Lyft with UberX, etc
      */
     public void orderLyftAndUber(){
+        ArrayList<UberRide> orderedUber = new ArrayList<>();
+
+        //first is uberpool
+        for (int i = 0; i < uberRides.size(); i++){
+            if (uberRides.get(i).getRideType().toUpperCase().equals("UberPool".toUpperCase())){
+                orderedUber.add(new UberRide(uberRides.get(i)));
+                uberRides.remove(i);
+                break;
+            }
+        }
+
+        //second is uberx
+        for (int i = 0; i < uberRides.size(); i++){
+            if (uberRides.get(i).getRideType().toUpperCase().equals("UberX".toUpperCase())){
+                orderedUber.add(new UberRide(uberRides.get(i)));
+                uberRides.remove(i);
+                break;
+            }
+        }
+
+        //third is select
+        for (int i = 0; i < uberRides.size(); i++){
+            if (uberRides.get(i).getRideType().toUpperCase().equals("Select".toUpperCase())){
+                orderedUber.add(new UberRide(uberRides.get(i)));
+                uberRides.remove(i);
+                break;
+            }
+        }
+
+        //fourth is spanish
+        for (int i = 0; i < uberRides.size(); i++){
+            if (uberRides.get(i).getRideType().toUpperCase().equals("Español".toUpperCase())){
+                orderedUber.add(new UberRide(uberRides.get(i)));
+                uberRides.remove(i);
+                break;
+            }
+        }
+
+        //fifth is xl
+        for (int i = 0; i < uberRides.size(); i++){
+            if (uberRides.get(i).getRideType().toUpperCase().equals("uberxl".toUpperCase())){
+                orderedUber.add(new UberRide(uberRides.get(i)));
+                uberRides.remove(i);
+                break;
+            }
+        }
+
+        //last is suv
+        for (int i = 0; i < uberRides.size(); i++){
+            if (uberRides.get(i).getRideType().toUpperCase().equals("ubersuv".toUpperCase())){
+                orderedUber.add(new UberRide(uberRides.get(i)));
+                uberRides.remove(i);
+                break;
+            }
+        }
+
+        // make the global uber rides arraylist the same as the ordered list
+        uberRides.clear();
+        uberRides.addAll(orderedUber);
+        for ( UberRide r : uberRides ){
+            System.out.println(r.getRideType());
+        }
 
     }
 
@@ -336,29 +417,40 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
     Using the Uber API, calculates the price estimates and the ride type
      */
     private ArrayList<UberRide> getPriceEstimateUber() {
-        ArrayList<UberRide> uberRides = new ArrayList<>();
+        ArrayList<UberRide> uber = new ArrayList<>();
         try {
-            Response<ProductsResponse> response = service.getProducts((float)startLat, (float)startLong).execute();
-            ProductsResponse products = response.body();
-            List<Product> productIdList = products.getProducts();
-
             Response<PriceEstimatesResponse> priceResponse = service.getPriceEstimates(
                     (float) startLat, (float) startLong, (float) endLat, (float) endLong
             ).execute();
-            PriceEstimatesResponse result = priceResponse.body();
-            List<PriceEstimate> prices = result.getPrices();
 
-            for( PriceEstimate estim : prices ){
-                String min = String.valueOf(estim.getLowEstimate());
-                String max = String.valueOf(estim.getHighEstimate());
-                String rideName = estim.getDisplayName();
-                System.out.println(rideName);
-                uberRides.add(new UberRide(min, max, rideName));
+            // if code is 422, then the user entered a start and end 100 miles apart (not allowed!)
+            if ( priceResponse.code() != 422 ) {
+                PriceEstimatesResponse result = priceResponse.body();
+                List<PriceEstimate> prices = result.getPrices();
+
+                for (PriceEstimate estim : prices) {
+                    String min = String.valueOf(estim.getLowEstimate());
+                    String max = String.valueOf(estim.getHighEstimate());
+                    String rideName = estim.getDisplayName();
+                    //System.out.println(rideName + " Min: " + min + " Max: " + max);
+                    uber.add(new UberRide(min, max, rideName));
+                }
+            }
+            else{
+                // send message to user not to have locations over 100 miles away, send Toast on main thread
+                runOnUiThread(new Runnable(){
+
+                    @Override
+                    public void run() {
+                        Toast.makeText(getApplicationContext(), "You can't have a travel of over 100 miles!",
+                                Toast.LENGTH_LONG).show();
+                    }
+                });
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
-        return uberRides;
+        return uber;
     }
 
     /*
@@ -366,5 +458,55 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
     */
     @Override
     public void onItemClicked(int index) {
+    }
+
+    /*
+    Called from adapter when the user wants to go to Uber through button click
+     */
+    public void goToUberApp(){
+       if (isPackageInstalled(this, "com.ubercab")){
+           openLink(this, "uber://?action=setPickup&pickup[latitude]=" + startLat +
+                   "&pickup[longitude]=" + startLong + "&dropoff[latitude]=" +
+                   endLat + "&dropoff[longitude]=" + endLong);
+       }
+       else{
+           Toast.makeText(this, "Uber not installed!", Toast.LENGTH_SHORT).show();
+       }
+    }
+
+    public void goToLyftApp(){
+        if (isPackageInstalled(this, "me.lyft.android")){
+            openLink(this, "lyft://ridetype?id=lyft&pickup[latitude]=" + startLat +
+                    "&pickup[longitude]=" + startLong + "&destination[latitude]=" +
+                    endLat + "&destination[longitude]=" + endLong);
+        }
+        else{
+            Toast.makeText(this, "Lyft not installed!", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /*
+    Send user to given activity
+     */
+    static void openLink(Activity activity, String link){
+        Intent playStoreIntent = new Intent(Intent.ACTION_VIEW);
+        playStoreIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        playStoreIntent.setData(Uri.parse(link));
+        activity.startActivity(playStoreIntent);
+    }
+
+    /*
+    Helper method to check if the Lyft/Uber package is already installed. If so, take
+    user to the native app. If not, take them to the app store.
+     */
+    static boolean isPackageInstalled(Context context, String packageId){
+        PackageManager pm = context.getPackageManager();
+        try{
+            pm.getPackageInfo(packageId, PackageManager.GET_ACTIVITIES);
+            return true;
+        } catch (PackageManager.NameNotFoundException e){
+            //ignored if name not found -- will return false after
+        }
+        return false;
     }
 }
