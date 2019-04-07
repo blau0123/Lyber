@@ -6,6 +6,7 @@ import android.content.pm.PackageManager;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
+import android.os.AsyncTask;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
@@ -34,10 +35,13 @@ import com.uber.sdk.rides.client.model.PriceEstimate;
 import com.uber.sdk.rides.client.model.PriceEstimatesResponse;
 import com.uber.sdk.rides.client.model.Product;
 import com.uber.sdk.rides.client.model.ProductsResponse;
+import com.uber.sdk.rides.client.model.RideEstimate;
+import com.uber.sdk.rides.client.model.RideRequestParameters;
 import com.uber.sdk.rides.client.model.TimeEstimatesResponse;
 import com.uber.sdk.rides.client.services.RidesService;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import retrofit2.Call;
@@ -51,9 +55,11 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
     private FusedLocationProviderClient fusedLocationClient;
     private double startLong, startLat, endLong, endLat;
     private RidesService service;
+    private ArrayList<UberRide> uberRides;
     // variables for lyft
     private LyftPublicApi lyftPublicApi;
     private ApiConfig apiConfig;
+    private ArrayList<LyftRide> lyftRides;
     //recyclerview to show list of rides
     RecyclerView rv;
     RecyclerView.Adapter myAdapter;
@@ -105,8 +111,8 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
                     if (endLoc != null) {
                         endLat = endLoc.getLatitude();
                         endLong = endLoc.getLongitude();
-                        getPriceEstimateLyft();
-                        getPriceEstimateUber();
+                        // call the asynctask to load the estimations
+                        new MainActivity.loadEstimations().execute();
                     }
                     else{
                         Toast.makeText(MainActivity.this, "Nani", Toast.LENGTH_SHORT).show();
@@ -215,6 +221,7 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
         SessionConfiguration config = new SessionConfiguration.Builder()
                 .setClientId("yPM13cwignlOH8w-8Ag09Ue0cW-dkFyN")
                 .setServerToken("4kt8rc31h1lOMVccszXdRocg1vn9p383L9GLkiAC")
+                .setRedirectUri("12345")
                 .setEnvironment(SessionConfiguration.Environment.SANDBOX)
                 .build();
         UberSdk.initialize(config);
@@ -234,12 +241,71 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
         lyftPublicApi = new LyftApiFactory(apiConfig).getLyftPublicApi();
     }
 
-    class loadEstimations
+    /*
+    Loads the Lyft and Uber price estimations in the background
+     */
+    public class loadEstimations extends AsyncTask<Void, Void, Void> {
+        @Override
+        protected Void doInBackground(Void... voids) {
+            lyftRides = getPriceEstimateLyft();
+            uberRides = getPriceEstimateUber();
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void aVoid) {
+            // organize uber list so it is in same order as lyft
+            orderLyftAndUber();
+
+            //create lyber and add to recyclerview list
+            ArrayList<Ride> rides = createLyber();
+            ApplicationClass.rideEstims.addAll(rides);
+            if (ApplicationClass.rideEstims.size() != 0){
+                myAdapter = new RideAdapter(MainActivity.this, ApplicationClass.rideEstims);
+                rv.setAdapter(myAdapter);
+            }
+        }
+    }
+
+    /*
+    Combines ArrayList of uber and lyft into one Ride arraylist
+     */
+    public ArrayList<Ride> createLyber(){
+        ArrayList<Ride> rides = new ArrayList<>();
+        int index = 0;
+        // add to Ride until one of them runs out
+        for (; index < Math.min(lyftRides.size(), uberRides.size()); index++){
+            rides.add(new Ride(uberRides.get(index), lyftRides.get(index)));
+        }
+
+        // if lyft has more entries left, then uber has none. add rest of lyft to rides
+        if (lyftRides.size() > 0){
+            for (; index < lyftRides.size(); index++ ){
+                rides.add(new Ride( new UberRide(), lyftRides.get(index)));
+            }
+        }
+        // if not, then lyft has no entries left, so add rest of uber
+        else{
+            for (; index < uberRides.size(); index++){
+                rides.add(new Ride( uberRides.get(index), new LyftRide()));
+            }
+        }
+        return rides;
+    }
+
+    /*
+    Reorder uberRides ArrayList so it is in the same order as lyftRides
+    e.g. Lyft Line is with UberPool, Lyft with UberX, etc
+     */
+    public void orderLyftAndUber(){
+
+    }
 
     /*
     Using the Lyft API, calculate the estimated price for each ride type
      */
-    private void getPriceEstimateLyft(){
+    private ArrayList<LyftRide> getPriceEstimateLyft(){
+        final ArrayList<LyftRide> lyftRides = new ArrayList<>();
         Call<CostEstimateResponse> costEstimateCall = lyftPublicApi.getCosts(startLat, startLong,
                 RideTypeEnum.ALL.toString(), endLat, endLong);
 
@@ -249,15 +315,13 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
                 CostEstimateResponse result = response.body();
                 for (CostEstimate costEstimate : result.cost_estimates){
                     // retrieving the estimated cost and ride type
-                    String[] priceEstims = {String.valueOf(costEstimate.estimated_cost_cents_min / 100),
-                            String.valueOf(costEstimate.estimated_cost_cents_max / 100)};
+                    String min = String.valueOf(costEstimate.estimated_cost_cents_min / 100);
+                    String max = String.valueOf(costEstimate.estimated_cost_cents_max / 100);
                     String rideType = costEstimate.ride_type;
 
                     // adding to the ArrayList representing the recyclerview items
-                    ApplicationClass.rideEstims.add(new Ride(priceEstims, rideType));
+                    lyftRides.add(new LyftRide(min, max, rideType));
                 }
-                myAdapter = new RideAdapter(MainActivity.this, ApplicationClass.rideEstims);
-                rv.setAdapter(myAdapter);
             }
 
             @Override
@@ -265,29 +329,36 @@ public class MainActivity extends AppCompatActivity implements RideAdapter.ItemC
                 Toast.makeText(MainActivity.this, "Failed call", Toast.LENGTH_SHORT).show();
             }
         });
+        return lyftRides;
     }
 
     /*
     Using the Uber API, calculates the price estimates and the ride type
      */
-    private void getPriceEstimateUber() {
+    private ArrayList<UberRide> getPriceEstimateUber() {
+        ArrayList<UberRide> uberRides = new ArrayList<>();
         try {
-
             Response<ProductsResponse> response = service.getProducts((float)startLat, (float)startLong).execute();
             ProductsResponse products = response.body();
             List<Product> productIdList = products.getProducts();
 
-            System.out.println(productIdList);
-            /*
-            Response<PriceEstimatesResponse> estims = service.getPriceEstimates((float)startLat, (float)startLong, (float)endLat, (float)endLong).execute();
-            PriceEstimatesResponse result = estims.body();
-            for (PriceEstimate price : result.getPrices()){
-                System.out.println(price.getEstimate());
+            Response<PriceEstimatesResponse> priceResponse = service.getPriceEstimates(
+                    (float) startLat, (float) startLong, (float) endLat, (float) endLong
+            ).execute();
+            PriceEstimatesResponse result = priceResponse.body();
+            List<PriceEstimate> prices = result.getPrices();
+
+            for( PriceEstimate estim : prices ){
+                String min = String.valueOf(estim.getLowEstimate());
+                String max = String.valueOf(estim.getHighEstimate());
+                String rideName = estim.getDisplayName();
+                System.out.println(rideName);
+                uberRides.add(new UberRide(min, max, rideName));
             }
-            */
         } catch (Exception e) {
             e.printStackTrace();
         }
+        return uberRides;
     }
 
     /*

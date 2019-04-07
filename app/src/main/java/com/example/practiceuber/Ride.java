@@ -1,63 +1,42 @@
 package com.example.practiceuber;
 
+import java.util.ArrayList;
+
 public class Ride {
-    // index 0 = min, index 1 = max
-    private String[] lyftEstimates;
-    private String[] uberEstimates;
-    private String rideType;
+    private UberRide uberRide;
+    private LyftRide lyftRide;
 
     public Ride(){
-        lyftEstimates = new String[2];
-        uberEstimates = new String[2];
-        rideType = "lyft/uberx".toUpperCase();
+        uberRide = new UberRide();
+        lyftRide = new LyftRide();
     }
 
-    public Ride(String[] lyft, String[] uber, String ride){
-        lyftEstimates = new String[2];
-        uberEstimates = new String[2];
-
-        // deep copy for lyft estimates
-        for (int i = 0; i < lyftEstimates.length; i++){
-            lyftEstimates[i] = lyft[i];
-        }
-
-        // deep copy for uber estimates
-        for (int i = 0; i < uberEstimates.length; i++){
-            uberEstimates[i] = uber[i];
-        }
-
-        rideType = ride;
+    public Ride(UberRide uber, LyftRide lyft){
+        uberRide = uber;
+        lyftRide = lyft;
     }
 
-    public Ride(String[] lyft, String ride){
-        lyftEstimates = new String[2];
-
-        // deep copy for lyft estimates
-        for (int i = 0; i < lyftEstimates.length; i++){
-            lyftEstimates[i] = lyft[i];
-        }
-
-        rideType = ride;
+    public String getUberRideType(){
+        return uberRide.getRideType().toUpperCase();
     }
 
-    public String getUberMin(){
-        return uberEstimates[0];
-    }
-
-    public String getUberMax(){
-        return uberEstimates[1];
-    }
-
-    public String getLyftMin(){
-        return lyftEstimates[0];
+    public String getLyftRideType(){
+        return lyftRide.getRideType().toUpperCase();
     }
 
     public String getLyftMax(){
-        return lyftEstimates[1];
+        return lyftRide.getMaxEstim();
     }
 
-    public String getRideType(){
-        return rideType;
+    public String getLyftMin(){
+        return lyftRide.getMinEstim();
     }
 
+    public String getUberMin(){
+        return uberRide.getMinEstim();
+    }
+
+    public String getUberMax(){
+        return uberRide.getMaxEstim();
+    }
 }

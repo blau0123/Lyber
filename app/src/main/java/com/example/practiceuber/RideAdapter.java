@@ -9,6 +9,8 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
 
+import org.w3c.dom.Text;
+
 import java.util.ArrayList;
 
 public class RideAdapter extends RecyclerView.Adapter<RideAdapter.ViewHolder>{
@@ -31,6 +33,7 @@ public class RideAdapter extends RecyclerView.Adapter<RideAdapter.ViewHolder>{
 
     public class ViewHolder extends RecyclerView.ViewHolder{
         TextView tvLyftEstim, tvUberEstim;
+        TextView tvLyftTitle, tvUberTitle;
         Button btnGoToLyft, btnGoToUber;
 
         public ViewHolder(@NonNull View itemView){
@@ -38,6 +41,9 @@ public class RideAdapter extends RecyclerView.Adapter<RideAdapter.ViewHolder>{
 
             tvLyftEstim = itemView.findViewById(R.id.tvLyftEstim);
             tvUberEstim = itemView.findViewById(R.id.tvUberEstim);
+            tvLyftTitle = itemView.findViewById(R.id.tvLyftTitle);
+            tvUberTitle = itemView.findViewById(R.id.tvUberTitle);
+
             btnGoToLyft = itemView.findViewById(R.id.btnGoToLyft);
             btnGoToUber = itemView.findViewById(R.id.btnGoToUber);
         }
@@ -56,10 +62,19 @@ public class RideAdapter extends RecyclerView.Adapter<RideAdapter.ViewHolder>{
     @Override
     public void onBindViewHolder(@NonNull ViewHolder viewHolder, int i) {
         viewHolder.itemView.setTag(rideEstims.get(i));
-        String lyftEstims = rideEstims.get(i).getRideType() +
+
+        viewHolder.tvLyftTitle.setText(rideEstims.get(i).getLyftRideType());
+        viewHolder.tvUberTitle.setText(rideEstims.get(i).getUberRideType());
+
+        String lyftEstims =
                 "\nMinimum: " + rideEstims.get(i).getLyftMin() +
                 "$\nMaximum: " + rideEstims.get(i).getLyftMax() + "$";
         viewHolder.tvLyftEstim.setText(lyftEstims);
+
+        String uberEstims =
+                "\nMinimum: " + rideEstims.get(i).getUberMin() +
+                "$\nMaximum: " + rideEstims.get(i).getUberMax() + "$";
+        viewHolder.tvUberEstim.setText(uberEstims);
     }
 
     @Override
